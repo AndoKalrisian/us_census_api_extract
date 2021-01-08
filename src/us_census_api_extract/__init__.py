@@ -91,6 +91,15 @@ def api_extract_batch(vars, request, retries=5) -> DataFrame:
                 for k in r.json():
                     # Census Tract GEOID: STATE+COUNTY+TRACT (2+3+6 digits)
                     tract.append(k[len(k) - 3] + k[len(k) - 2] + k[len(k) - 1])
+                    
+                    if 'county' not in data:
+                        data['county'] = []
+                    data['county'].append(k[len(k) - 2])
+                    
+                    if 'state' not in data:
+                        data['state'] = []
+                    data['state'].append(k[len(k) - 3])
+                    
                     # start with the second piece of json data, first piece is not needed
                     json_data_index = 1
                     for var in vars:
@@ -156,7 +165,7 @@ def api_state_extract(num_processed, num_to_process,
 
 def extract_by_var(vars, state_codes,
                    request_url_pre, request_url_post_1, request_url_post_2, api_key,
-                   tmp_folder, tmp_filename_prefix='',) -> DataFrame:
+                   tmp_folder, tmp_filename_prefix='', reset=False) -> DataFrame:
     """
     Idempotent function to extract demographic variable ('vars') data for each state
     in 'state_code' from the US census api. Keep track of progress and save a temp table 
@@ -169,8 +178,10 @@ def extract_by_var(vars, state_codes,
         request_url_post_1 (str): api request middle bit of string
         request_url_post_2 (str): api request middle bit of string
         api_key (str): api key
-        progress_fp (ConfigParser): Object used to write to progress file
-            to keep track of extraction progress
+        tmp_folder(str): temp folder to store partial extraction
+        tmp_filename_prefix(str): temp filename prefix
+        reset(Boolean): reset progress keeper?
+        
 
     Returns:
         results (Dataframe): The resulting table of the extraction 
@@ -182,8 +193,12 @@ def extract_by_var(vars, state_codes,
     # -> I have a key, so I guess its unlimited ?!?
 
     path = tmp_folder + tmp_filename_prefix + '/'
-
-    progress = Progress(path + 'progress.cfg',
+    progress_fp = path + 'progress.cfg'
+    
+    if reset and os.path.exists(progress_fp):
+        os.remove(progress_fp)
+    
+    progress = Progress(progress_fp,
                         ['states_processed', 'batches_in_state_processed'])
     export_tmp_fp = path + '/us_census_api_extract.parquet.gzip'
     export_tmp_state_fp = path + '/us_census_api_extract_state.parquet.gzip'
@@ -222,7 +237,12 @@ def extract_by_var(vars, state_codes,
             if not os.path.exists(export_tmp_fp):
                 result_df.to_parquet(export_tmp_fp, compression='gzip')
             else:
-                tmp_df = result_df.join(tmp_df, how='left')
+                tmp_df = result_df.join(tmp_df, how='left', lsuffix='_delete')
+                if 'county_delete' in tmp_df:
+                    tmp_df.drop(columns=['county_delete'], inplace=True)
+                if 'state_delete' in tmp_df:
+                    tmp_df.drop(columns=['state_delete'], inplace=True)    
+                print(tmp_df)
                 tmp_df.to_parquet(export_tmp_fp, compression='gzip')
 
             # record progress

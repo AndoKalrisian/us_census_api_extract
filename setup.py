@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="us_census_api_extract",
-    version="0.0.1",
+    version="0.1.6",
     author="Anders Bergman",
     author_email="",
     description="Extract US census data (as a DataFrame) by inputting a list of demographic variables and US state codes.",
